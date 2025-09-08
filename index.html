@@ -1,19 +1,612 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="id">
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Qeumu Test</title>
-<style>
-  body{font-family:system-ui,Arial;margin:0;display:grid;place-items:center;height:100vh;background:#0f172a;color:#e2e8f0}
-  .card{padding:24px;border-radius:16px;background:#111827;box-shadow:0 10px 30px #0003;max-width:600px}
-  a{color:#38bdf8}
-</style>
-<body>
-  <div class="card">
-    <h1>🎉 GitHub Pages jalan!</h1>
-    <p>Kalau kamu membaca ini, berarti <b>index.html</b> sudah ter-publish.</p>
-    <p>Selanjutnya upload file aplikasi keuanganmu sebagai <b>index.html</b> juga (gantikan file ini).</p>
-    <p><a href="https://github.com/kinghalim/Qeumu">Repo Qeumu</a></p>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Keuangan – Cloud + Charts + Login</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- SheetJS (export/import) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.20.1/dist/xlsx.full.min.js"></script>
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto p-4 sm:p-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-cyan-500 to-blue-600 p-5 rounded-2xl shadow">
+      <div class="flex items-start gap-3 flex-wrap">
+        <div class="flex-1">
+          <p id="greet" class="text-sm opacity-90">Selamat Datang,</p>
+          <h1 class="text-2xl font-extrabold">Catatan Keuangan</h1>
+          <p class="text-sm opacity-90">Mode: <span id="modeLabel">Offline</span> • <span id="userMail" class="opacity-95"></span></p>
+        </div>
+        <!-- Login -->
+        <div class="flex items-center gap-2">
+          <div id="g_id_onload"
+               data-client_id=""
+               data-context="signin"
+               data-callback="onGoogleSignIn"
+               data-auto_select="false"
+               data-itp_support="true">
+          </div>
+          <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="signin_with" data-shape="pill" data-logo_alignment="left"></div>
+          <button id="logoutBtn" class="hidden px-3 py-2 rounded-lg border border-slate-200/50 hover:bg-white/10">Logout</button>
+        </div>
+      </div>
+
+      <div class="bg-white/95 text-slate-900 mt-4 p-4 rounded-xl shadow">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h3 class="font-semibold">Ringkasan (sesuai filter)</h3>
+          <span id="rangeLabel" class="text-sm text-slate-600"></span>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-3 mt-2">
+          <div class="sm:col-span-2">
+            <p id="totalExpense" class="text-3xl font-extrabold">Rp 0</p>
+            <p class="text-sm">Budget Usage: <span id="budgetUsage">0%</span></p>
+            <div class="w-full bg-slate-200 rounded-full h-2 mt-1">
+              <div id="budgetBar" class="bg-blue-500 h-2 rounded-full" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-slate-100 rounded-lg p-3">
+              <p class="text-slate-500 text-sm">Total Pemasukan</p>
+              <p id="totalIncome" class="font-bold">Rp 0</p>
+            </div>
+            <div class="bg-slate-100 rounded-lg p-3">
+              <p class="text-slate-500 text-sm">Saldo Rentang</p>
+              <p id="netThisRange" class="font-bold">Rp 0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Input cepat -->
+    <div class="bg-slate-800/80 p-4 rounded-2xl shadow mt-6">
+      <label class="block text-sm mb-2 opacity-90">Catat transaksi cepat</label>
+      <div class="flex flex-col lg:flex-row gap-2">
+        <input id="textInput" class="flex-1 px-3 py-2 rounded-lg border border-slate-600 bg-white text-slate-900"
+               placeholder="contoh: beli kopi 25k / gaji 3.5 jt / macbook 30.000.000" />
+        <select id="typeSelect" class="px-3 py-2 rounded-lg border border-slate-600 bg-slate-900">
+          <option value="auto">Auto (AI)</option>
+          <option value="income">Income</option>
+          <option value="expense">Expense</option>
+        </select>
+        <button id="addBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold">+ Tambah</button>
+      </div>
+      <p class="text-xs opacity-70 mt-2">
+        Tips: “gaji/dapat uang/uang masuk/terima/transfer masuk/refund” → otomatis <b>income</b>.
+        Tekan <b>Enter</b> untuk tambah lebih cepat.
+      </p>
+    </div>
+
+    <!-- Filter -->
+    <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 items-end">
+      <div>
+        <label class="text-sm block mb-1 opacity-80">Budget (opsional)</label>
+        <input id="budgetInput" type="number" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800" value="1000000" />
+      </div>
+      <div>
+        <label class="text-sm block mb-1 opacity-80">Dari tanggal</label>
+        <input id="dateFrom" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800" />
+      </div>
+      <div>
+        <label class="text-sm block mb-1 opacity-80">Sampai tanggal</label>
+        <input id="dateTo" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800" />
+      </div>
+    </div>
+
+    <div class="mt-3 flex flex-wrap gap-2 items-end">
+      <div>
+        <label class="text-sm block mb-1 opacity-80">Filter kategori</label>
+        <select id="categoryFilter" class="px-3 py-2 rounded-lg border border-slate-700 bg-slate-800">
+          <option value="">Semua Kategori</option>
+        </select>
+      </div>
+      <div class="flex-1 min-w-[200px]">
+        <label class="text-sm block mb-1 opacity-80">🔍 Search cepat</label>
+        <input id="searchInput" type="text" placeholder="cari: kopi, listrik, gaji…"
+               class="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800"/>
+      </div>
+      <div class="ml-auto flex flex-wrap gap-2">
+        <button id="setToday" class="px-3 py-2 rounded-lg border border-slate-700">Hari ini</button>
+        <button id="setYesterday" class="px-3 py-2 rounded-lg border border-slate-700">Kemarin</button>
+        <button id="setThisMonth" class="px-3 py-2 rounded-lg border border-slate-700">Bulan ini</button>
+        <button onclick="exportXLSX()" class="px-3 py-2 rounded-lg border border-emerald-500 text-emerald-300 hover:bg-emerald-500/10">Export Excel</button>
+        <label class="px-3 py-2 rounded-lg border border-sky-500 text-sky-300 hover:bg-sky-500/10 cursor-pointer">
+          Import Excel/CSV
+          <input id="importFile" type="file" accept=".xlsx,.csv" class="hidden" onchange="importFile(event)">
+        </label>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="mt-6 grid gap-4 md:grid-cols-2">
+      <div class="bg-slate-800/80 rounded-2xl p-4">
+        <h3 class="font-semibold mb-2">Pie: Proporsi Pengeluaran per Kategori</h3>
+        <canvas id="pieCat"></canvas>
+      </div>
+      <div class="bg-slate-800/80 rounded-2xl p-4">
+        <h3 class="font-semibold mb-2">Bar: Income vs Expense (12 bulan terakhir)</h3>
+        <canvas id="barMonthly"></canvas>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="mt-6">
+      <h3 class="font-semibold text-lg mb-2">History Transaksi</h3>
+      <div id="history" class="space-y-2"></div>
+    </div>
   </div>
+
+  <!-- Modal Edit -->
+  <div id="editModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-slate-800 p-6 rounded-xl max-w-lg w-full">
+      <h3 class="text-lg font-bold mb-4">Edit Transaksi</h3>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <div class="sm:col-span-2">
+          <label class="text-sm opacity-80">Deskripsi</label>
+          <input id="editText" class="w-full px-3 py-2 rounded-lg border border-slate-600 bg-white text-slate-900" />
+        </div>
+        <div>
+          <label class="text-sm opacity-80">Tipe</label>
+          <select id="editType" class="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-900">
+            <option value="income">Income</option>
+            <option value="expense">Expense</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm opacity-80">Nominal</label>
+          <input id="editAmount" class="w-full px-3 py-2 rounded-lg border border-slate-600 bg-white text-slate-900" placeholder="contoh: 1.000.000" />
+        </div>
+        <div>
+          <label class="text-sm opacity-80">Kategori</label>
+          <input id="editCategory" class="w-full px-3 py-2 rounded-lg border border-slate-600 bg-white text-slate-900" />
+        </div>
+        <div>
+          <label class="text-sm opacity-80">Tanggal</label>
+          <input id="editDate" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-900" />
+        </div>
+        <div>
+          <label class="text-sm opacity-80">Jam</label>
+          <input id="editTime" type="time" class="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-900" />
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button onclick="closeEdit()" class="px-3 py-2 rounded-lg border border-slate-600">Batal</button>
+        <button onclick="saveEdit()" class="px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   KONFIGURASI – ISI BAGIAN INI
+   - WEBAPP_URL: URL Web App Apps Script kamu (method: POST JSON) dengan action: add/update/delete/list/summaryMonthly
+   - API_TOKEN: token sederhana untuk server (Script Properties), boleh kosong kalau tidak dipakai
+   - GOOGLE_CLIENT_ID: client id Google Identity Services (untuk login email)
+========================= */
+const WEBAPP_URL = ""; // e.g. "https://script.google.com/macros/s/AKfycb.../exec"
+const API_TOKEN   = ""; // e.g. "salim-12345"
+const GOOGLE_CLIENT_ID = ""; // e.g. "1234567890-abcdef.apps.googleusercontent.com"
+
+/* =========================
+   STATE & UTIL
+========================= */
+let transactions = JSON.parse(localStorage.getItem("tx_powerup") || "[]");
+let budget = Number(localStorage.getItem("budget_powerup") || 1000000);
+let editingId = null;
+let currentRows = [];
+let currentUserEmail = localStorage.getItem("user_email") || "";
+const $ = id => document.getElementById(id);
+const pad = n => (n<10?'0':'')+n;
+const rupiah = n => 'Rp ' + (Number(n||0)).toLocaleString('id-ID');
+const toDateInput = d => { const t=new Date(d); return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`; };
+const toTimeInput = d => { const t=new Date(d); return `${pad(t.getHours())}:${pad(t.getMinutes())}`; };
+const tsToLocal = d => { const t=new Date(d); return `${pad(t.getDate())}-${pad(t.getMonth()+1)}-${t.getFullYear()} ${pad(t.getHours())}:${pad(t.getMinutes())}`; };
+const greet = () => { const h=new Date().getHours(); return h>=5&&h<=10?'Selamat Pagi,':h<=14?'Selamat Siang,':h<=17?'Selamat Sore,':'Selamat Malam,'; };
+$('greet').textContent = greet(); setInterval(()=>{$('greet').textContent=greet();},60_000);
+$('modeLabel').textContent = WEBAPP_URL ? 'Cloud (Sheets)' : 'Offline';
+$('userMail').textContent = currentUserEmail ? `Login: ${currentUserEmail}` : 'Belum login';
+if (GOOGLE_CLIENT_ID) {
+  document.getElementById('g_id_onload').setAttribute('data-client_id', GOOGLE_CLIENT_ID);
+}
+const logoutBtn = $('logoutBtn');
+logoutBtn.onclick = () => { currentUserEmail=""; localStorage.removeItem('user_email'); $('userMail').textContent='Belum login'; logoutBtn.classList.add('hidden'); };
+
+/* =========================
+   AI-like parsing
+========================= */
+function parseAmountSmart(text){
+  const s=(text||'').toLowerCase().replace(/,/g,'.');
+  const jt=[...s.matchAll(/(\d+(?:\.\d+)?)\s*(jt|juta)\b/g)].map(m=>parseFloat(m[1])*1_000_000);
+  const k =[...s.matchAll(/(\d+(?:\.\d+)?)\s*(k|rb|ribu)\b/g)].map(m=>parseFloat(m[1])*1_000);
+  const plain=[...s.matchAll(/(?<![a-z])(\d{1,3}(?:[.\s]\d{3})+|\d{4,})(?![a-z])/g)].map(m=>Number(m[1].replace(/[.\s]/g,'')));
+  const c=[...jt,...k,...plain].filter(n=>isFinite(n)&&n>0);
+  return c.length?Math.max(...c):0;
+}
+function aiParse(text, forced='auto'){
+  const t=(text||'').toLowerCase();
+  const amount=parseAmountSmart(text);
+  let type='expense';
+  if (/(gaji|dapat uang|uang masuk|terima|transfer masuk|bayaran|invoice|payment received|refund|saldo awal)/.test(t)) type='income';
+  if (forced==='income') type='income';
+  if (forced==='expense') type='expense';
+  let category='Lainnya';
+  const rules=[
+    {kw:['kopi','makan','minum','warteg','kfc','ayam','bakso','kuliner','somay','sate','teh'],cat:'Makanan/Minuman'},
+    {kw:['bensin','pertamina','gojek','grab','taksi','transport','tol','parkir'],cat:'Transportasi'},
+    {kw:['token','pln','listrik','air','pdam','internet','wifi','pulsa'],cat:'Utilitas'},
+    {kw:['sewa','kontrakan','kos'],cat:'Sewa'},
+    {kw:['belanja','alfamart','indomaret','market','toko'],cat:'Belanja'},
+    {kw:['gaji','invoice','bayaran','transfer masuk','dapat uang','uang masuk','terima','saldo awal'],cat:'Pemasukan'}
+  ];
+  for (const r of rules){ if (r.kw.some(k=>t.includes(k))){ category=r.cat; break; } }
+  if (type==='income' && category!=='Pemasukan') category='Pemasukan';
+  return {type,amount,category};
+}
+
+/* =========================
+   Rupiah input helpers
+========================= */
+function formatRupiahInput(val){ val=(val||'').replace(/\D/g,''); return val.replace(/\B(?=(\d{3})+(?!\d))/g,'.'); }
+function parseRupiahInput(val){ return Number((val||'').replace(/\./g,'').replace(/[^0-9]/g,'')||0); }
+$('editAmount').addEventListener('input', e => e.target.value = formatRupiahInput(e.target.value));
+
+/* =========================
+   Default date range: Bulan ini
+========================= */
+function setThisMonth(){
+  const now=new Date();
+  $('dateFrom').value = toDateInput(new Date(now.getFullYear(), now.getMonth(), 1));
+  $('dateTo').value   = toDateInput(new Date(now.getFullYear(), now.getMonth()+1, 0));
+}
+function setToday(){ const d=toDateInput(new Date()); $('dateFrom').value=d; $('dateTo').value=d; }
+function setYesterday(){ const d=new Date(); d.setDate(d.getDate()-1); const y=toDateInput(d); $('dateFrom').value=y; $('dateTo').value=y; }
+setThisMonth();
+
+/* =========================
+   Storage Abstraction (Offline / Cloud)
+   Server (Apps Script) JSON schema:
+   POST {action:'add'|'update'|'delete'|'list'|'summaryMonthly', token, email, record?, id?, from?, to?, q?, category?}
+   - list: returns {ok:true, rows:[{id,ts,type,amount,category,text,email?}]}
+   - summaryMonthly: returns {ok:true, months:[{month:'YYYY-MM', income:..., expense:...}]}
+========================= */
+$('modeLabel').textContent = WEBAPP_URL ? 'Cloud (Sheets)' : 'Offline';
+
+async function apiCall(payload){
+  if (!WEBAPP_URL) return {ok:false, error:'no_webapp'};
+  const body = JSON.stringify({...payload, token:API_TOKEN || undefined, email: currentUserEmail || undefined});
+  try{
+    const res = await fetch(WEBAPP_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body });
+    return await res.json();
+  }catch(e){ return {ok:false, error:String(e)}; }
+}
+
+async function apiList(from,to,q,cat){
+  if (!WEBAPP_URL){
+    // OFFLINE
+    let rows = transactions.slice();
+    const fromMs = from? new Date(from+'T00:00:00').getTime() : -Infinity;
+    const toMs   = to?   new Date(to+'T23:59:59').getTime()   :  Infinity;
+    rows = rows.filter(r=>{
+      const t = new Date(r.ts).getTime();
+      if (t<fromMs || t>toMs) return false;
+      if (cat && r.category!==cat) return false;
+      if (q){
+        const s=(r.text||'')+' '+(r.category||'')+' '+(r.type||'');
+        if (!s.toLowerCase().includes(q.toLowerCase())) return false;
+      }
+      return true;
+    });
+    return { ok:true, rows };
+  }
+  return apiCall({action:'list', from, to, q, category:cat});
+}
+async function apiAdd(rec){
+  if (!WEBAPP_URL){
+    transactions.push(rec);
+    localStorage.setItem("tx_powerup", JSON.stringify(transactions));
+    return {ok:true};
+  }
+  return apiCall({action:'add', record: rec});
+}
+async function apiUpdate(rec){
+  if (!WEBAPP_URL){
+    const i=transactions.findIndex(t=>t.id===rec.id);
+    if (i>-1){ transactions[i]=rec; localStorage.setItem("tx_powerup", JSON.stringify(transactions)); return {ok:true}; }
+    return {ok:false};
+  }
+  return apiCall({action:'update', record: rec});
+}
+async function apiDelete(id){
+  if (!WEBAPP_URL){
+    transactions = transactions.filter(t=>t.id!==id);
+    localStorage.setItem("tx_powerup", JSON.stringify(transactions));
+    return {ok:true};
+  }
+  return apiCall({action:'delete', id});
+}
+async function apiSummaryMonthly(){
+  if (!WEBAPP_URL){
+    // build last 12 months from local data
+    const months = {};
+    const now = new Date();
+    for (let i=11;i>=0;i--){
+      const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+      const key=`${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+      months[key]={month:key,income:0,expense:0};
+    }
+    transactions.forEach(t=>{
+      const d=new Date(t.ts);
+      const key=`${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+      if (!months[key]) return;
+      if (t.type==='income') months[key].income += Number(t.amount||0);
+      else months[key].expense += Number(t.amount||0);
+    });
+    return {ok:true, months:Object.values(months)};
+  }
+  return apiCall({action:'summaryMonthly'});
+}
+
+/* =========================
+   UI: Add / Edit / Delete
+========================= */
+$('budgetInput').value = budget;
+$('budgetInput').addEventListener('change', ()=>{
+  budget = Number($('budgetInput').value||0);
+  localStorage.setItem("budget_powerup", String(budget));
+  renderSummaryOnly(); // update bar tanpa fetch ulang
+});
+$('addBtn').onclick = handleAdd;
+$('textInput').addEventListener('keydown', e=>{ if(e.key==='Enter') handleAdd(); });
+
+async function handleAdd(){
+  const text=$('textInput').value.trim();
+  const forced=$('typeSelect').value;
+  if(!text) return;
+  const {type,amount,category}=aiParse(text,forced);
+  const rec={ id:crypto.randomUUID(), ts:new Date().toISOString(), type, amount, category, text, email: currentUserEmail || '' };
+  const res=await apiAdd(rec);
+  if(!res.ok){ alert('Gagal simpan'); return; }
+  $('textInput').value='';
+  await refresh();
+}
+async function removeTx(id){
+  if(!confirm('Hapus transaksi ini?')) return;
+  const res=await apiDelete(id);
+  if(!res.ok){ alert('Gagal hapus'); return; }
+  await refresh();
+}
+function openEdit(id){
+  const tx = currentRows.find(t=>t.id===id);
+  if(!tx) return;
+  editingId=id;
+  $('editText').value=tx.text||'';
+  $('editType').value=tx.type;
+  $('editAmount').value=formatRupiahInput(String(tx.amount||0));
+  $('editCategory').value=tx.category||'';
+  $('editDate').value=toDateInput(tx.ts);
+  $('editTime').value=toTimeInput(tx.ts);
+  $('editModal').classList.remove('hidden'); $('editModal').classList.add('flex');
+}
+function closeEdit(){ $('editModal').classList.add('hidden'); $('editModal').classList.remove('flex'); editingId=null; }
+async function saveEdit(){
+  const tx = currentRows.find(t=>t.id===editingId);
+  if(!tx) return;
+  const rec={
+    id: tx.id,
+    ts: ($('editDate').value? new Date(`${$('editDate').value}T${$('editTime').value||'00:00'}:00`).toISOString() : tx.ts),
+    type: $('editType').value,
+    amount: parseRupiahInput($('editAmount').value),
+    category: $('editCategory').value || 'Lainnya',
+    text: $('editText').value || '',
+    email: currentUserEmail || ''
+  };
+  const res=await apiUpdate(rec);
+  if(!res.ok){ alert('Gagal update'); return; }
+  closeEdit();
+  await refresh();
+}
+
+/* =========================
+   Export / Import
+========================= */
+function exportXLSX(){
+  const rows = (WEBAPP_URL? currentRows : transactions).map(t => ({
+    id: t.id, ts: new Date(t.ts).toISOString(), type: t.type, amount: t.amount, category: t.category, text: t.text, email: t.email||''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "transactions");
+  XLSX.writeFile(wb, "transaksi.xlsx");
+}
+function importFile(ev){
+  const file = ev.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const ext = file.name.toLowerCase().split('.').pop();
+    let list=[];
+    if(ext==='csv'){
+      const text = reader.result;
+      const rows = text.split(/\r?\n/).filter(Boolean);
+      const header = rows.shift().split(',').map(h=>h.trim().replace(/^"|"$/g,''));
+      list = rows.map(r=>{
+        const cols = r.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g).map(c=>c.replace(/^"|"$/g,'').replace(/""/g,'"'));
+        return Object.fromEntries(header.map((h,i)=>[h, cols[i] ?? '']));
+      });
+    }else{
+      const wb = XLSX.read(reader.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      list = XLSX.utils.sheet_to_json(ws, {defval:""});
+    }
+    // Merge: add/update one by one (works offline & cloud)
+    for (const r of list){
+      const rec = {
+        id: r.id || crypto.randomUUID(),
+        ts: r.ts ? new Date(r.ts).toISOString() : new Date().toISOString(),
+        type: (String(r.type||'expense').toLowerCase()==='income')?'income':'expense',
+        amount: Number(r.amount||0),
+        category: r.category || 'Lainnya',
+        text: r.text || '',
+        email: r.email || currentUserEmail || ''
+      };
+      // If exists → update, else add
+      const exists = (WEBAPP_URL ? currentRows : transactions).some(t=>t.id===rec.id);
+      if (exists) await apiUpdate(rec); else await apiAdd(rec);
+    }
+    ev.target.value=""; await refresh(); alert("Import selesai ✅");
+  };
+  if (file.name.toLowerCase().endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsBinaryString(file);
+}
+
+/* =========================
+   Charts
+========================= */
+let pieChart=null, barChart=null;
+function renderPieCategory(rows){
+  const catMap={};
+  rows.forEach(t=>{ if(t.type==='expense'){ const k=t.category||'Lainnya'; catMap[k]=(catMap[k]||0)+Number(t.amount||0);} });
+  const labels=Object.keys(catMap), data=Object.values(catMap);
+  const ctx=$('pieCat');
+  if (pieChart) pieChart.destroy();
+  pieChart = new Chart(ctx, {
+    type:'pie',
+    data:{ labels, datasets:[{ data }] },
+    options:{ plugins:{ legend:{ position:'bottom' } } }
+  });
+}
+async function renderBarMonthly(){
+  const res = await apiSummaryMonthly();
+  if (!res.ok){ return; }
+  const months = res.months || [];
+  const labels = months.map(m=>m.month);
+  const income = months.map(m=>m.income||0);
+  const expense = months.map(m=>m.expense||0);
+  const ctx=$('barMonthly');
+  if (barChart) barChart.destroy();
+  barChart = new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Income', data:income, backgroundColor:'rgba(34,197,94,0.6)'},
+        {label:'Expense', data:expense, backgroundColor:'rgba(239,68,68,0.6)'}
+      ]
+    },
+    options:{ responsive:true, scales:{ y:{ ticks:{ callback:v=>'Rp '+Number(v).toLocaleString('id-ID') } } } }
+  });
+}
+
+/* =========================
+   Filters / Refresh / Render
+========================= */
+$('setToday').onclick = ()=>{ setToday(); refresh(); };
+$('setYesterday').onclick = ()=>{ setYesterday(); refresh(); };
+$('setThisMonth').onclick = ()=>{ setThisMonth(); refresh(); };
+$('dateFrom').onchange = refresh;
+$('dateTo').onchange = refresh;
+$('categoryFilter').onchange = refresh;
+$('searchInput').oninput = refresh;
+
+function rebuildCategoryOptions(rows){
+  const set = new Set(rows.map(r=>r.category).filter(Boolean));
+  const cur = $('categoryFilter').value;
+  $('categoryFilter').innerHTML = `<option value="">Semua Kategori</option>` + Array.from(set).sort().map(c=>`<option value="${c}">${c}</option>`).join('');
+  if (Array.from(set).includes(cur)) $('categoryFilter').value = cur;
+}
+
+function renderSummaryOnly(){
+  const from=$('dateFrom').value, to=$('dateTo').value, cat=$('categoryFilter').value, q=$('searchInput').value.trim().toLowerCase();
+  let rows = (WEBAPP_URL ? currentRows : transactions).slice();
+  // apply filters locally just for summary when offline change budget only
+  rows = rows.filter(t=>{
+    const tt=new Date(t.ts).getTime();
+    const a=from? new Date(from+'T00:00:00').getTime() : -Infinity;
+    const b=to?   new Date(to+'T23:59:59').getTime()   :  Infinity;
+    if (tt<a || tt>b) return false;
+    if (cat && t.category!==cat) return false;
+    if (q){
+      const s=((t.text||'')+' '+(t.category||'')+' '+(t.type||'')).toLowerCase();
+      if (!s.includes(q)) return false;
+    }
+    return true;
+  });
+  const totalIncome  = rows.filter(t=>t.type==='income').reduce((a,b)=>a+Number(b.amount||0),0);
+  const totalExpense = rows.filter(t=>t.type==='expense').reduce((a,b)=>a+Number(b.amount||0),0);
+  $('totalIncome').textContent  = rupiah(totalIncome);
+  $('totalExpense').textContent = rupiah(totalExpense);
+  $('netThisRange').textContent = rupiah(totalIncome-totalExpense);
+  const usage = budget? Math.round((totalExpense/budget)*100) : 0;
+  $('budgetUsage').textContent = usage + '%';
+  $('budgetBar').style.width = Math.min(100, usage) + '%';
+}
+
+async function refresh(){
+  const from=$('dateFrom').value, to=$('dateTo').value, q=$('searchInput').value.trim(), cat=$('categoryFilter').value;
+  $('rangeLabel').textContent = (from&&to)? `${from} s/d ${to}` : '';
+  const res = await apiList(from,to,q,cat);
+  if (!res.ok){ alert('Gagal memuat data'); return; }
+  currentRows = res.rows.sort((a,b)=> new Date(b.ts)-new Date(a.ts));
+  rebuildCategoryOptions(currentRows);
+
+  // summary
+  const totalIncome  = currentRows.filter(t=>t.type==='income').reduce((a,b)=>a+Number(b.amount||0),0);
+  const totalExpense = currentRows.filter(t=>t.type==='expense').reduce((a,b)=>a+Number(b.amount||0),0);
+  $('totalIncome').textContent  = rupiah(totalIncome);
+  $('totalExpense').textContent = rupiah(totalExpense);
+  $('netThisRange').textContent = rupiah(totalIncome-totalExpense);
+  const usage = budget? Math.round((totalExpense/budget)*100) : 0;
+  $('budgetUsage').textContent = usage + '%';
+  $('budgetBar').style.width = Math.min(100, usage) + '%';
+
+  // history
+  $('history').innerHTML = currentRows.length
+    ? currentRows.map(t=>`
+      <div class="bg-slate-800 rounded-xl p-3 space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="text-xs px-2 py-0.5 rounded-full ${t.type==='income'?'bg-emerald-500/20 text-emerald-300':'bg-rose-500/20 text-rose-300'}">${t.type.toUpperCase()}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-slate-600/40">${t.category||'Lainnya'}</span>
+          <span class="text-xs text-slate-400 ml-auto">${tsToLocal(t.ts)}</span>
+          <span class="font-bold ${t.type==='income'?'text-emerald-300':'text-rose-300'} ml-3">${rupiah(t.amount)}</span>
+          <button class="text-blue-300 hover:text-blue-500 ml-2" onclick="openEdit('${t.id}')">✏️</button>
+          <button class="text-red-300 hover:text-red-500 ml-1" onclick="removeTx('${t.id}')">🗑️</button>
+        </div>
+        <div class="text-sm text-slate-300">${t.text||''}</div>
+      </div>
+    `).join('')
+    : `<p class="text-slate-400">Tidak ada transaksi pada filter ini.</p>`;
+
+  renderPieCategory(currentRows);
+  await renderBarMonthly();
+}
+
+/* =========================
+   Google Sign-In (GIS)
+========================= */
+window.onGoogleSignIn = (response) => {
+  try{
+    // decode JWT (header.payload.signature)
+    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    const email = payload.email || '';
+    if (email){
+      currentUserEmail = email;
+      localStorage.setItem('user_email', email);
+      $('userMail').textContent = `Login: ${email}`;
+      logoutBtn.classList.remove('hidden');
+    }
+  }catch(e){
+    console.log('GIS parse error', e);
+  }
+};
+
+/* First load */
+(async ()=>{
+  await refresh();
+})();
+</script>
 </body>
 </html>
