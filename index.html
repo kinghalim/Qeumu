@@ -19,7 +19,7 @@
       <div class="flex items-start gap-3 flex-wrap">
         <div class="flex-1">
           <p id="greet" class="text-sm opacity-90">Selamat Datang,</p>
-          <h1 class="text-2xl font-extrabold">Catatan Keuangan</h1>
+          <h1 class="text-2xl font-extrabold">King Halim</h1>
           <p class="text-sm opacity-90">Mode: <span id="modeLabel">Offline</span> • <span id="userMail" class="opacity-95"></span></p>
         </div>
         <!-- Login -->
@@ -188,9 +188,23 @@
    - API_TOKEN: token sederhana untuk server (Script Properties), boleh kosong kalau tidak dipakai
    - GOOGLE_CLIENT_ID: client id Google Identity Services (untuk login email)
 ========================= */
-const WEBAPP_URL = "https://script.google.com/macros/s/AKfycb.../exec";
-const API_TOKEN   = "";
-const GOOGLE_CLIENT_ID = "";
+const SPREADSHEET_ID = 'https://docs.google.com/spreadsheets/d/1d0gtk6RbuWm_qB8UOJ1wXPYa0O8YNMdQ7AVibCjfwXI/edit?gid=0#gid=0'; // ambil dari URL Sheet
+const SHEET_NAME = 'Transactions';
+const HEADERS = ['id','ts','type','amount','category','text','email'];
+
+function _ss() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+function _sh() {
+  const ss = _ss();
+  let sh = ss.getSheetByName(SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_NAME);
+    sh.clear();               // bersihkan
+    sh.appendRow(HEADERS);    // pasang header
+  }
+  return sh;
+}
 
 /* =========================
    STATE & UTIL
@@ -610,4 +624,5 @@ window.onGoogleSignIn = (response) => {
 </script>
 </body>
 </html>
+
 
